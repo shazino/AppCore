@@ -358,8 +358,8 @@ NSString * NSStringFromORKTaskViewControllerFinishReason (ORKTaskViewControllerF
     
     __weak typeof(self) weakSelf = self;
     //add dictionaries or json data to the archive, calling completeArchive when done
-    [self.result.results enumerateObjectsUsingBlock:^(ORKStepResult *stepResult, NSUInteger __unused idx, BOOL * __unused stop) {
-        [stepResult.results enumerateObjectsUsingBlock:^(ORKResult *result, NSUInteger __unused idx, BOOL *__unused stop) {
+    [self.result.results enumerateObjectsUsingBlock:^(ORKResult *stepResult, NSUInteger __unused idx, BOOL * __unused stop) {
+        [((ORKStepResult *)stepResult).results enumerateObjectsUsingBlock:^(ORKResult *result, NSUInteger __unused idx, BOOL *__unused stop) {
             __strong typeof(self) strongSelf = weakSelf;
             //Update date if needed
             if (!result.startDate) {
@@ -511,7 +511,7 @@ NSString * NSStringFromORKTaskViewControllerFinishReason (ORKTaskViewControllerF
     APCScheduledTask * scheduledTask = (APCScheduledTask*)[appDelegate.dataSubstrate.mainContext objectWithID:objID];
     id localRestorationData = [coder decodeObjectForKey:@"restorationData"];
     if (scheduledTask) {
-        APCBaseTaskViewController * tvc =[[self alloc] initWithTask:task restorationData:localRestorationData];
+        APCBaseTaskViewController * tvc =[[self alloc] initWithTask:task restorationData:localRestorationData delegate:nil];
         tvc.scheduledTask = scheduledTask;
         tvc.restorationIdentifier = [task identifier];
         tvc.restorationClass = self;
