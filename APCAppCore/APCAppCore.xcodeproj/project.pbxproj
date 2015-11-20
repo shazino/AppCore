@@ -3582,7 +3582,6 @@
 				TargetAttributes = {
 					F5179B2819D09128001DCCB7 = {
 						CreatedOnToolsVersion = 6.0.1;
-						DevelopmentTeam = NL3PRC58UN;
 					};
 					F5179B3319D09128001DCCB7 = {
 						CreatedOnToolsVersion = 6.0.1;
