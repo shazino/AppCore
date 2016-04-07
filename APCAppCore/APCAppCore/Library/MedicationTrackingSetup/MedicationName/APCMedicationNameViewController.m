@@ -52,16 +52,20 @@ static  CGFloat    kSectionHeaderLabelOffset = 10.0;
 
 static  CGFloat    kAPCMedicationRowHeight   = 64.0;
 
-@interface APCMedicationNameViewController  ( )  <UITableViewDataSource, UITableViewDelegate>
+@interface APCMedicationNameViewController  ( )  <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating>
 
-@property  (nonatomic, weak)  IBOutlet  UITableView      *tabulator;
+@property  (nonatomic, weak)  IBOutlet  UITableView *tabulator;
 
-@property  (nonatomic, weak)            UIBarButtonItem  *donester;
-@property  (nonatomic, assign)          BOOL              doneButtonWasTapped;
+@property  (nonatomic, weak)   UIBarButtonItem   *donester;
+@property  (nonatomic, assign) BOOL               doneButtonWasTapped;
 
-@property  (nonatomic, strong)          NSArray          *medicationList;
+@property  (nonatomic, strong) NSArray <APCMedTrackerMedication *> *medicationList;
 
-@property  (nonatomic, strong)          NSIndexPath      *selectedIndex;
+@property  (nonatomic, strong) NSIndexPath        *selectedIndex;
+
+@property  (nonatomic, strong) UISearchController *searchController;
+@property  (nonatomic, weak)   UITableViewController *resultsController;
+@property  (nonatomic, strong) NSArray <APCMedTrackerMedication *> *searchResultsMedicationList;
 
 @end
 
@@ -92,14 +96,24 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
 
 #pragma  mark  -  Table View Data Source Methods
 
+- (NSArray <APCMedTrackerMedication *> *)medicationListForTableView:(UITableView *)tableView
+{
+    if (tableView == self.tabulator) {
+        return self.medicationList;
+    }
+    else {
+        return self.searchResultsMedicationList;
+    }
+}
+
 - (NSInteger)numberOfSectionsInTableView:(UITableView *) __unused tableView
 {
     return  kNumberOfSectionsInTable;
 }
 
-- (NSInteger)tableView:(UITableView *) __unused tableView numberOfRowsInSection:(NSInteger) __unused section
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger) __unused section
 {
-    NSInteger  numberOfRows = [self.medicationList count];
+    NSInteger  numberOfRows = [[self medicationListForTableView:tableView] count];
     return  numberOfRows;
 }
 
@@ -108,7 +122,7 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
     APCMedicationNameTableViewCell  *cell = [tableView dequeueReusableCellWithIdentifier:kMedicationNameTableCell];
     
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    APCMedTrackerMedication  *medication = self.medicationList[indexPath.row];
+    APCMedTrackerMedication  *medication = [self medicationListForTableView:tableView][indexPath.row];
     NSString  *medicationName = medication.name;
     NSRange  range = [medicationName rangeOfString:@" ("];
     NSString  *firstString = nil;
@@ -128,7 +142,7 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
         cell.topLabel.text      = firstString;
         cell.bottomLabel.text   = secondString;
     }
-    if (self.selectedIndex != nil) {
+    if (self.selectedIndex != nil && tableView == self.tabulator) {
         if ([self.selectedIndex isEqual:indexPath]) {
             cell.accessoryType = UITableViewCellAccessoryCheckmark;
         } else {
@@ -142,6 +156,18 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
+    if (tableView != self.tabulator) {
+        APCMedTrackerMedication *selectedMedication = self.searchResultsMedicationList[indexPath.row];
+        NSUInteger indexOfSelectedMedication = [self.medicationList indexOfObject:selectedMedication];
+        if (indexOfSelectedMedication != NSNotFound) {
+            self.selectedIndex = [NSIndexPath indexPathForRow:indexOfSelectedMedication inSection:0];
+        }
+
+        [self doneButtonTapped:nil];
+
+        return;
+    }
+
     UITableViewCell  *selectedCell = [tableView cellForRowAtIndexPath:indexPath];
     if (self.selectedIndex == nil) {
         self.selectedIndex = indexPath;
@@ -173,8 +199,8 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
 - (CGFloat)tableView:(UITableView *) __unused tableView heightForHeaderInSection:(NSInteger)section
 {
     CGFloat  answer = 0;
-    
-    if (section == 0) {
+
+    if (section == 0 && tableView == self.tabulator) {
         answer = kSectionHeaderHeight;
     }
     return  answer;
@@ -184,7 +210,7 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
 {
     UIView  *view = nil;
     
-    if (section == 0) {
+    if (section == 0 && tableView == self.tabulator) {
         CGFloat  width  = CGRectGetWidth(tableView.frame);
         CGFloat  height = [self tableView:tableView heightForHeaderInSection:section];
         CGRect   frame  = CGRectMake(0.0, 0.0, width, height);
@@ -295,11 +321,35 @@ static  CGFloat    kAPCMedicationRowHeight   = 64.0;
             [self.tabulator reloadData];
         }
     }];
+
+    {
+        UITableViewController *resultsController = [[UITableViewController alloc] initWithStyle:UITableViewStylePlain];
+        resultsController.tableView.dataSource = self;
+        resultsController.tableView.delegate = self;
+        [resultsController.tableView registerNib:medicationNameTableCellNib forCellReuseIdentifier:kMedicationNameTableCell];
+
+        self.searchController = [[UISearchController alloc] initWithSearchResultsController:resultsController];
+        self.resultsController = resultsController;
+
+        self.searchController.searchResultsUpdater = self;
+
+        // Install the search bar as the table header.
+        self.tabulator.tableHeaderView = self.searchController.searchBar;
+
+        // It is usually good to set the presentation context.
+        self.definesPresentationContext = YES;
+    }
 }
 
-- (void)didReceiveMemoryWarning
+#pragma mark - Search results updating
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController
 {
-    [super didReceiveMemoryWarning];
+    NSString *searchTerms = searchController.searchBar.text;
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K CONTAINS[cd] %@", @"name", searchTerms];
+    self.searchResultsMedicationList = [self.medicationList filteredArrayUsingPredicate:predicate];
+
+    [self.resultsController.tableView reloadData];
 }
 
 @end
